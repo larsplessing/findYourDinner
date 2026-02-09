@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rezept Details</title>
+    <link rel="stylesheet" href="../css/main.css">
+    <link rel="stylesheet" href="../css/detail.css">
+    
+    <!-- JavaScript Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="../js/lib/jszip.min.js"></script>
+    
+    <!-- Custom Scripts -->
+    <script src="../js/xmlParser.js"></script>
+    <script src="../js/imageStore.js"></script>
+    <script src="../js/recipeGenerator.js"></script>
+</head>
+<body>
+    <div class="detail-container">
+        <div class="detail-header">
+            <button class="detail-back-btn" onclick="goBack()">
+                ← Zurück zur Übersicht
+            </button>
+
+            <div class="detail-hero">
+                <div class="detail-image-gallery">
+                    <div class="detail-image-main" id="recipeImageMain">
+                        <div class="emoji-placeholder">🍽️</div>
+                    </div>
+                    <div class="detail-image-thumbnails" id="imageThumbnails" style="display: none;"></div>
+                </div>
+
+                <div class="detail-info">
+                    <h1 class="detail-title" id="recipeTitle">Rezept wird geladen...</h1>
+                    <div class="recipe-category-badge" id="recipeCategory" style="display: none;"></div>
+                    
+                    <div class="detail-meta" id="recipeMeta"></div>
+                    
+                    <div class="detail-actions">
+                        <button class="primary-btn" onclick="printRecipe()">
+                            🖨️ Drucken
+                        </button>
+                        <button class="secondary-btn" onclick="selectRandomRecipe()">
+                            🎲 Anderes Rezept
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="detail-content">
+            <!-- Zutaten -->
+            <div class="detail-section">
+                <h2>📝 Zutaten</h2>
+                <ul class="ingredients-list" id="ingredientsList">
+                    <li class="no-data">Lade Zutaten...</li>
+                </ul>
+            </div>
+
+            <!-- Zubereitung -->
+            <div class="detail-section">
+                <h2>👨‍🍳 Zubereitung</h2>
+                <ol class="instructions-list" id="instructionsList">
+                    <li class="no-data">Lade Anleitung...</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <!-- Random FAB -->
+    <button class="random-fab" onclick="selectRandomRecipe()" title="Zufälliges Rezept">
+        🎲
+    </button>
+
+    <script>
+        const generator = new RecipeGenerator();
+        let currentRecipe = null;
+        let allImages = [];
+        let currentImageIndex = 0;
+
+        window.addEventListener('load', async () => {
+            // Lade Rezepte aus LocalStorage
+            if (!generator.loadFromLocalStorage()) {
+                // Versuche von URL zu laden
+                try {
+                    await generator.loadFromURL('../Rezepte.xlsx');
+                    generator.saveToLocalStorage();
+                } catch (error) {
+                    alert('Fehler beim Laden der Rezepte. Bitte gehe zurück zur Startseite.');
+                    goBack();
+                    return;
+                }
+            }
+
+            // Hole aktuelles Rezept
+            const recipeName = localStorage.getItem('currentRecipe');
+            if (!recipeName) {
+                alert('Kein Rezept ausgewählt');
+                goBack();
+                return;
+            }
+
+            currentRecipe = generator.getRecipeByName(recipeName);
+            if (!currentRecipe) {
+                alert('Rezept nicht gefunden');
+                goBack();
+                return;
+            }
+
+            await displayRecipe();
+        });
+
+        async function displayRecipe() {
+            if (!currentRecipe) return;
+
+            // Titel
+            document.getElementById('recipeTitle').textContent = currentRecipe.name;
+            document.title = currentRecipe.name + ' - Rezept';
+
+            // Kategorie
+            const categoryEl = document.getElementById('recipeCategory');
+            if (currentRecipe.category) {
+                categoryEl.textContent = currentRecipe.category;
+                categoryEl.style.display = 'inline-block';
+            }
+
+            // Bild/Emoji
+            const imageEl = document.getElementById('recipeImageMain');
+            const thumbnailsEl = document.getElementById('imageThumbnails');
+            const emoji = getRecipeEmoji(currentRecipe.name);
+            const gradient = getGradientForRecipe(currentRecipe.name);
+            
+            // Setze zunächst Emoji + Gradient
+            imageEl.className = `detail-image-main ${gradient}`;
+            imageEl.querySelector('.emoji-placeholder').textContent = emoji;
+
+            // Versuche alle Bilder zu laden
+            try {
+                const imageURLs = await generator.getAllRecipeImageURLs(currentRecipe.name);
+                
+                if (imageURLs && imageURLs.length > 0) {
+                    allImages = imageURLs;
+                    currentImageIndex = 0;
+                    
+                    // Zeige erstes Bild
+                    displayImage(0);
+                    
+                    // Wenn mehrere Bilder vorhanden, zeige Thumbnails
+                    if (imageURLs.length > 1) {
+                        displayThumbnails();
+                    }
+                }
+            } catch (error) {
+                console.warn('Bilder konnten nicht geladen werden:', error);
+            }
+
+            // Meta-Informationen
+            const metaEl = document.getElementById('recipeMeta');
+            metaEl.innerHTML = '';
+
+            if (currentRecipe.servings) {
+                metaEl.innerHTML += `
+                    <div class="detail-meta-item">
+                        👥 <strong>${currentRecipe.servings}</strong> Portionen
+                    </div>
+                `;
+            }
+
+            if (currentRecipe.ingredients && currentRecipe.ingredients.length > 0) {
+                metaEl.innerHTML += `
+                    <div class="detail-meta-item">
+                        📝 <strong>${currentRecipe.ingredients.length}</strong> Zutaten
+                    </div>
+                `;
+            }
+
+            if (currentRecipe.instructions && currentRecipe.instructions.length > 0) {
+                metaEl.innerHTML += `
+                    <div class="detail-meta-item">
+                        👨‍🍳 <strong>${currentRecipe.instructions.length}</strong> Schritte
+                    </div>
+                `;
+            }
+
+            // Zutaten
+            displayIngredients();
+
+            // Anleitung
+            displayInstructions();
+        }
+
+        function displayImage(index) {
+            if (index < 0 || index >= allImages.length) return;
+            
+            currentImageIndex = index;
+            const imageEl = document.getElementById('recipeImageMain');
+            
+            // Ersetze mit echtem Bild
+            const img = document.createElement('img');
+            img.src = allImages[index];
+            img.alt = currentRecipe.name;
+            img.onload = () => {
+                imageEl.innerHTML = '';
+                imageEl.appendChild(img);
+                imageEl.classList.remove('gradient-1', 'gradient-2', 'gradient-3', 'gradient-4', 'gradient-5', 'gradient-6', 'gradient-7', 'gradient-8');
+            };
+        }
+
+        function displayThumbnails() {
+            const thumbnailsEl = document.getElementById('imageThumbnails');
+            thumbnailsEl.innerHTML = '';
+            thumbnailsEl.style.display = 'flex';
+            
+            allImages.forEach((imageURL, index) => {
+                const thumbnail = document.createElement('div');
+                thumbnail.className = 'image-thumbnail';
+                if (index === currentImageIndex) {
+                    thumbnail.classList.add('active');
+                }
+                
+                const img = document.createElement('img');
+                img.src = imageURL;
+                img.alt = `Bild ${index + 1}`;
+                img.onclick = () => {
+                    displayImage(index);
+                    updateThumbnailSelection(index);
+                };
+                
+                thumbnail.appendChild(img);
+                thumbnailsEl.appendChild(thumbnail);
+            });
+        }
+
+        function updateThumbnailSelection(index) {
+            const thumbnails = document.querySelectorAll('.image-thumbnail');
+            thumbnails.forEach((thumb, i) => {
+                if (i === index) {
+                    thumb.classList.add('active');
+                } else {
+                    thumb.classList.remove('active');
+                }
+            });
+        }
+
+        function displayIngredients() {
+            const listEl = document.getElementById('ingredientsList');
+            
+            if (!currentRecipe.ingredients || currentRecipe.ingredients.length === 0) {
+                listEl.innerHTML = '<li class="no-data">Keine Zutaten verfügbar</li>';
+                return;
+            }
+
+            listEl.innerHTML = '';
+            currentRecipe.ingredients.forEach(ingredient => {
+                const li = document.createElement('li');
+                li.className = 'ingredient-item';
+                
+                li.innerHTML = `
+                    <span class="ingredient-amount">${ingredient.amount || ''}</span>
+                    <span class="ingredient-unit">${ingredient.unit || ''}</span>
+                    <span class="ingredient-product">${ingredient.product}</span>
+                    ${ingredient.note ? `<span class="ingredient-note">${ingredient.note}</span>` : ''}
+                `;
+                
+                listEl.appendChild(li);
+            });
+        }
+
+        function displayInstructions() {
+            const listEl = document.getElementById('instructionsList');
+            
+            if (!currentRecipe.instructions || currentRecipe.instructions.length === 0) {
+                listEl.innerHTML = '<li class="no-data">Keine Anleitung verfügbar</li>';
+                return;
+            }
+
+            listEl.innerHTML = '';
+            currentRecipe.instructions
+                .sort((a, b) => a.step - b.step)
+                .forEach(instruction => {
+                    const li = document.createElement('li');
+                    li.className = 'instruction-item';
+                    li.innerHTML = `<div class="instruction-text">${instruction.text}</div>`;
+                    listEl.appendChild(li);
+                });
+        }
+
+        function getRecipeEmoji(recipeName) {
+            const name = recipeName.toLowerCase();
+            
+            if (name.includes('pizza')) return '🍕';
+            if (name.includes('burger')) return '🍔';
+            if (name.includes('pasta') || name.includes('nudel')) return '🍝';
+            if (name.includes('salat')) return '🥗';
+            if (name.includes('suppe')) return '🍲';
+            if (name.includes('kuchen') || name.includes('torte')) return '🍰';
+            if (name.includes('brot')) return '🍞';
+            if (name.includes('hähnchen') || name.includes('chicken')) return '🍗';
+            if (name.includes('fisch')) return '🐟';
+            if (name.includes('reis')) return '🍚';
+            if (name.includes('curry')) return '🍛';
+            if (name.includes('sandwich') || name.includes('subway')) return '🥪';
+            if (name.includes('taco')) return '🌮';
+            if (name.includes('sushi')) return '🍣';
+            if (name.includes('steak')) return '🥩';
+            if (name.includes('ei')) return '🍳';
+            if (name.includes('auflauf')) return '🥘';
+            if (name.includes('dessert') || name.includes('nachtisch')) return '🍮';
+            if (name.includes('kartoffel')) return '🥔';
+            if (name.includes('pute')) return '🦃';
+            if (name.includes('gnocchi')) return '🥟';
+            if (name.includes('nacho')) return '🌮';
+            if (name.includes('punsch')) return '🍷';
+            if (name.includes('tiramisu')) return '🍰';
+            if (name.includes('kaiserschmarn')) return '🥞';
+            if (name.includes('apfel')) return '🍎';
+            if (name.includes('oatmeal') || name.includes('haferflocken')) return '🥣';
+            if (name.includes('naan')) return '🫓';
+            if (name.includes('mac')) return '🧀';
+            
+            return '🍽️';
+        }
+
+        function getGradientForRecipe(recipeName) {
+            const hash = recipeName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+            return `gradient-${(hash % 8) + 1}`;
+        }
+
+        function goBack() {
+            window.location.href = '../index.html';
+        }
+
+        function printRecipe() {
+            window.print();
+        }
+
+        function selectRandomRecipe() {
+            const random = generator.getRandomRecipe();
+            if (random) {
+                localStorage.setItem('currentRecipe', random.name);
+                window.location.reload();
+            }
+        }
+    </script>
+
+    <style>
+        .random-fab {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            font-size: 1.5em;
+            cursor: pointer;
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .random-fab:hover {
+            transform: scale(1.1) rotate(180deg);
+            box-shadow: 0 8px 30px rgba(102, 126, 234, 0.6);
+        }
+
+        .detail-image-gallery {
+            width: 100%;
+            max-width: 600px;
+        }
+
+        .detail-image-main {
+            width: 100%;
+            height: 400px;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .detail-image-main img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 15px;
+        }
+
+        .detail-image-thumbnails {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            overflow-x: auto;
+            padding: 5px 0;
+            scrollbar-width: thin;
+            scrollbar-color: #667eea #f0f0f0;
+        }
+
+        .detail-image-thumbnails::-webkit-scrollbar {
+            height: 6px;
+        }
+
+        .detail-image-thumbnails::-webkit-scrollbar-track {
+            background: #f0f0f0;
+            border-radius: 3px;
+        }
+
+        .detail-image-thumbnails::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 3px;
+        }
+
+        .image-thumbnail {
+            flex-shrink: 0;
+            width: 80px;
+            height: 80px;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            border: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .image-thumbnail:hover {
+            border-color: #667eea;
+            transform: scale(1.05);
+        }
+
+        .image-thumbnail.active {
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .image-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .emoji-placeholder {
+            font-size: 8em;
+            position: relative;
+            z-index: 1;
+        }
+
+        .recipe-category-badge {
+            display: inline-block;
+            padding: 6px 14px;
+            background: rgba(102, 126, 234, 0.1);
+            color: #667eea;
+            border-radius: 15px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
+        /* Gradient Classes */
+        .gradient-1 { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .gradient-2 { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
+        .gradient-3 { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .gradient-4 { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); }
+        .gradient-5 { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
+        .gradient-6 { background: linear-gradient(135deg, #30cfd0 0%, #330867 100%); }
+        .gradient-7 { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); }
+        .gradient-8 { background: linear-gradient(135deg, #ff9a56 0%, #ff6a88 100%); }
+    </style>
+</body>
+</html>

@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Was koche ich heute? - Rezeptfinder</title>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/pinterest.css">
+    
+    <!-- JavaScript Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="js/lib/jszip.min.js"></script>
+    
+    <!-- Custom Scripts -->
+    <script src="js/xmlParser.js"></script>
+    <script src="js/imageStore.js"></script>
+    <script src="js/recipeGenerator.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Upload Overlay (wenn keine Rezepte geladen) -->
+        <div id="uploadOverlay" class="upload-overlay" style="display: none;">
+            <div class="upload-card">
+                <h1>🍳 Was koche ich heute?</h1>
+                <p>Lade deine Rezepte.xlsx, um zu starten</p>
+                <label for="fileInput" class="file-label">
+                    📂 Rezepte laden
+                </label>
+                <input type="file" id="fileInput" accept=".xlsx,.xls" />
+                <div id="uploadStatus" class="upload-status"></div>
+                <div id="progressContainer" class="progress-container" style="display: none;">
+                    <div class="progress-bar">
+                        <div id="progressBar" class="progress-fill"></div>
+                    </div>
+                    <div id="progressText" class="progress-text">Lade...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pinterest Header -->
+        <div class="pinterest-header">
+            <div class="search-container">
+                <h2 style="margin: 0; color: #667eea; font-size: 1.5em;">🍳</h2>
+                <input 
+                    type="text" 
+                    class="search-input" 
+                    id="searchInput" 
+                    placeholder="Suche Rezepte..."
+                    autocomplete="off"
+                />
+                <button class="primary-btn" onclick="showUploadDialog()" style="white-space: nowrap;">
+                    📂 Neu laden
+                </button>
+            </div>
+            
+            <!-- Category Filter -->
+            <div class="category-filter" id="categoryFilter" style="display: none;">
+                <button class="category-chip active" data-category="Alle" onclick="filterByCategory('Alle')">
+                    Alle
+                </button>
+            </div>
+        </div>
+
+        <!-- Masonry Grid -->
+        <div id="masonryGrid" class="masonry-grid"></div>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="loading">Lade Rezepte...</div>
+
+        <!-- Random FAB -->
+        <button class="random-fab" onclick="selectRandomRecipe()" title="Zufälliges Rezept">
+            🎲
+        </button>
+    </div>
+
+    <script>
+        const generator = new RecipeGenerator();
+        let allRecipes = [];
+        let filteredRecipes = [];
+        let currentCategory = 'Alle';
+
+        const searchInput = document.getElementById('searchInput');
+        const masonryGrid = document.getElementById('masonryGrid');
+        const loadingState = document.getElementById('loadingState');
+        const uploadOverlay = document.getElementById('uploadOverlay');
+        const fileInput = document.getElementById('fileInput');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const categoryFilter = document.getElementById('categoryFilter');
+
+        // Event Listeners
+        searchInput.addEventListener('input', handleSearch);
+        fileInput.addEventListener('change', handleFileUpload);
+
+        // Initial Load
+        window.addEventListener('load', async () => {
+            // Versuche aus LocalStorage zu laden
+            if (generator.loadFromLocalStorage()) {
+                allRecipes = generator.getAllRecipes();
+                filteredRecipes = [...allRecipes];
+                initializeCategoryFilter();
+                await displayRecipes();
+            } else {
+                // Versuche automatisch zu laden
+                try {
+                    loadingState.textContent = 'Versuche Rezepte.xlsx automatisch zu laden...';
+                    await generator.loadFromURL('Rezepte.xlsx', updateProgress);
+                    generator.saveToLocalStorage();
+                    allRecipes = generator.getAllRecipes();
+                    filteredRecipes = [...allRecipes];
+                    initializeCategoryFilter();
+                    await displayRecipes();
+                } catch (error) {
+                    showUploadDialog();
+                }
+            }
+        });
+
+        async function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            uploadStatus.innerHTML = '';
+            progressContainer.style.display = 'block';
+            progressBar.style.width = '0%';
+            progressText.textContent = 'Starte...';
+
+            try {
+                await generator.loadExcelFile(file, updateProgress);
+                generator.saveToLocalStorage();
+                allRecipes = generator.getAllRecipes();
+                filteredRecipes = [...allRecipes];
+                uploadOverlay.style.display = 'none';
+                initializeCategoryFilter();
+                await displayRecipes();
+                
+                const stats = await generator.getStats();
+                console.log(`✓ ${stats.total} Rezepte geladen, ${stats.withImages} mit Bildern`);
+            } catch (error) {
+                uploadStatus.innerHTML = `<div class="error">${error.message}</div>`;
+                progressContainer.style.display = 'none';
+            }
+        }
+
+        function updateProgress(info) {
+            const progress = info.progress || 0;
+            const message = info.message || '';
+            
+            progressBar.style.width = progress + '%';
+            progressText.textContent = message;
+            
+            if (progress >= 100) {
+                setTimeout(() => {
+                    progressContainer.style.display = 'none';
+                }, 1000);
+            }
+        }
+
+        async function displayRecipes() {
+            loadingState.style.display = 'none';
+            masonryGrid.innerHTML = '';
+
+            if (filteredRecipes.length === 0) {
+                masonryGrid.innerHTML = '<div class="no-results">Keine Rezepte gefunden</div>';
+                return;
+            }
+
+            // Zeige zunächst Platzhalter
+            const fragment = document.createDocumentFragment();
+            
+            for (let index = 0; index < filteredRecipes.length; index++) {
+                const recipe = filteredRecipes[index];
+                const item = document.createElement('div');
+                item.className = 'masonry-item';
+                item.dataset.recipeName = recipe.name;
+
+                const emoji = getRecipeEmoji(recipe.name);
+                const gradient = `gradient-${(index % 8) + 1}`;
+                const heightClass = getRandomHeight(recipe.name);
+
+                item.innerHTML = `
+                    <div class="recipe-pin" onclick="openRecipe('${recipe.name.replace(/'/g, "\\'")}')">
+                        <div class="recipe-pin-image ${gradient} ${heightClass}" data-recipe="${recipe.name}">
+                            ${emoji}
+                        </div>
+                        <div class="recipe-pin-content">
+                            <div class="recipe-pin-title">${recipe.name}</div>
+                            ${recipe.category ? `<div class="recipe-category-badge">${recipe.category}</div>` : ''}
+                            <div class="recipe-pin-info">
+                                ${recipe.servings ? `<div class="recipe-pin-info-item">👥 ${recipe.servings} Portionen</div>` : ''}
+                                ${recipe.ingredients ? `<div class="recipe-pin-info-item">📝 ${recipe.ingredients.length} Zutaten</div>` : ''}
+                            </div>
+                        </div>
+                        <div class="recipe-pin-overlay">
+                            <button>Rezept ansehen</button>
+                        </div>
+                    </div>
+                `;
+
+                fragment.appendChild(item);
+            }
+            
+            masonryGrid.appendChild(fragment);
+
+            // Lade echte Bilder asynchron
+            loadRecipeImages();
+        }
+
+        async function loadRecipeImages() {
+            for (const recipe of filteredRecipes) {
+                try {
+                    const imageURL = await generator.getRecipeImageURL(recipe.name);
+                    if (imageURL) {
+                        // Finde das entsprechende Bild-Element
+                        const imageEl = document.querySelector(`[data-recipe="${recipe.name}"]`);
+                        if (imageEl) {
+                            // Erstelle img Element
+                            const img = document.createElement('img');
+                            img.src = imageURL;
+                            img.alt = recipe.name;
+                            img.style.width = '100%';
+                            img.style.height = '100%';
+                            img.style.objectFit = 'cover';
+                            
+                            // Ersetze Emoji mit Bild
+                            imageEl.innerHTML = '';
+                            imageEl.appendChild(img);
+                            imageEl.classList.remove('gradient-1', 'gradient-2', 'gradient-3', 'gradient-4', 'gradient-5', 'gradient-6', 'gradient-7', 'gradient-8');
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`Bild für ${recipe.name} konnte nicht geladen werden:`, error);
+                }
+            }
+        }
+
+        function getRecipeEmoji(recipeName) {
+            const name = recipeName.toLowerCase();
+            
+            if (name.includes('pizza')) return '🍕';
+            if (name.includes('burger')) return '🍔';
+            if (name.includes('pasta') || name.includes('nudel')) return '🍝';
+            if (name.includes('salat')) return '🥗';
+            if (name.includes('suppe')) return '🍲';
+            if (name.includes('kuchen') || name.includes('torte')) return '🍰';
+            if (name.includes('brot')) return '🍞';
+            if (name.includes('hähnchen') || name.includes('chicken')) return '🍗';
+            if (name.includes('fisch')) return '🐟';
+            if (name.includes('reis')) return '🍚';
+            if (name.includes('curry')) return '🍛';
+            if (name.includes('sandwich') || name.includes('subway')) return '🥪';
+            if (name.includes('taco')) return '🌮';
+            if (name.includes('sushi')) return '🍣';
+            if (name.includes('steak')) return '🥩';
+            if (name.includes('ei')) return '🍳';
+            if (name.includes('auflauf')) return '🥘';
+            if (name.includes('dessert') || name.includes('nachtisch')) return '🍮';
+            if (name.includes('kartoffel')) return '🥔';
+            if (name.includes('pute')) return '🦃';
+            if (name.includes('gnocchi')) return '🥟';
+            if (name.includes('nacho')) return '🌮';
+            if (name.includes('punsch')) return '🍷';
+            if (name.includes('tiramisu')) return '🍰';
+            if (name.includes('kaiserschmarn')) return '🥞';
+            if (name.includes('apfel')) return '🍎';
+            if (name.includes('oatmeal') || name.includes('haferflocken')) return '🥣';
+            if (name.includes('naan')) return '🫓';
+            if (name.includes('mac')) return '🧀';
+            
+            return '🍽️';
+        }
+
+        function getRandomHeight(seed) {
+            // Konsistente Höhe basierend auf Namen
+            const hash = seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+            const heights = ['', 'tall', 'short'];
+            return heights[hash % heights.length];
+        }
+
+        function handleSearch(e) {
+            const searchTerm = e.target.value;
+            applyFilters(searchTerm, currentCategory);
+        }
+
+        function filterByCategory(category) {
+            currentCategory = category;
+            
+            // Update active state
+            document.querySelectorAll('.category-chip').forEach(chip => {
+                chip.classList.remove('active');
+                if (chip.dataset.category === category) {
+                    chip.classList.add('active');
+                }
+            });
+            
+            applyFilters(searchInput.value, category);
+        }
+
+        function applyFilters(searchTerm, category) {
+            // Zuerst nach Kategorie filtern
+            let recipes = category === 'Alle' ? allRecipes : generator.filterByCategory(category);
+            
+            // Dann nach Suchbegriff filtern
+            if (searchTerm && searchTerm.trim() !== '') {
+                const term = searchTerm.toLowerCase().trim();
+                recipes = recipes.filter(recipe => 
+                    recipe.name.toLowerCase().includes(term)
+                );
+            }
+            
+            filteredRecipes = recipes;
+            displayRecipes();
+        }
+
+        function initializeCategoryFilter() {
+            const categories = generator.getAllCategories();
+            
+            if (categories.length === 0) {
+                categoryFilter.style.display = 'none';
+                return;
+            }
+            
+            // Baue Category Chips
+            let html = '<button class="category-chip active" data-category="Alle" onclick="filterByCategory(\'Alle\')">Alle</button>';
+            
+            categories.forEach(category => {
+                const escapedCategory = category.replace(/'/g, "\\'");
+                html += `<button class="category-chip" data-category="${category}" onclick="filterByCategory('${escapedCategory}')">${category}</button>`;
+            });
+            
+            categoryFilter.innerHTML = html;
+            categoryFilter.style.display = 'flex';
+        }
+
+        function selectRandomRecipe() {
+            const random = generator.getRandomRecipe(filteredRecipes);
+            if (random) {
+                openRecipe(random.name);
+            }
+        }
+
+        function openRecipe(recipeName) {
+            // Speichere Rezeptname und öffne Detail-Seite
+            localStorage.setItem('currentRecipe', recipeName);
+            window.location.href = 'pages/recipe-detail.html';
+        }
+
+        function showUploadDialog() {
+            uploadOverlay.style.display = 'flex';
+            uploadStatus.innerHTML = '';
+            progressContainer.style.display = 'none';
+        }
+
+        // Keyboard Shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'r' || e.key === 'R') {
+                if (document.activeElement !== searchInput) {
+                    selectRandomRecipe();
+                }
+            }
+        });
+    </script>
+
+    <style>
+        .upload-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        }
+
+        .upload-card {
+            background: white;
+            border-radius: 20px;
+            padding: 50px;
+            text-align: center;
+            max-width: 500px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .upload-card h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .upload-card p {
+            color: #666;
+            font-size: 1.2em;
+            margin-bottom: 30px;
+        }
+
+        .upload-status {
+            margin-top: 20px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .file-label {
+            display: inline-block;
+            padding: 15px 40px;
+            font-size: 1.2em;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+            background: #667eea;
+            color: white;
+        }
+
+        .file-label:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .progress-container {
+            margin-top: 30px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #f0f0f0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        .progress-text {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        /* Category Filter Styles */
+        .category-filter {
+            display: flex;
+            gap: 10px;
+            padding: 15px 20px;
+            overflow-x: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #667eea #f0f0f0;
+        }
+
+        .category-filter::-webkit-scrollbar {
+            height: 6px;
+        }
+
+        .category-filter::-webkit-scrollbar-track {
+            background: #f0f0f0;
+            border-radius: 3px;
+        }
+
+        .category-filter::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 3px;
+        }
+
+        .category-chip {
+            padding: 8px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 20px;
+            background: white;
+            color: #666;
+            font-size: 0.9em;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .category-chip:hover {
+            border-color: #667eea;
+            color: #667eea;
+            transform: translateY(-2px);
+        }
+
+        .category-chip.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: transparent;
+        }
+
+        .recipe-category-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            background: rgba(102, 126, 234, 0.1);
+            color: #667eea;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+    </style>
+</body>
+</html>
