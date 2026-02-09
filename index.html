@@ -20,6 +20,7 @@
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/pinterest.css">
     <link rel="stylesheet" href="css/mobile.css">
+    <link rel="stylesheet" href="css/chrome-ios.css">
     
     <!-- JavaScript Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -224,41 +225,63 @@
         }
 
         async function loadRecipeImages() {
-            for (const recipe of filteredRecipes) {
-                try {
-                    const imageURL = await generator.getRecipeImageURL(recipe.name);
-                    const imageEl = document.querySelector(`[data-recipe="${recipe.name}"]`);
-                    
-                    if (!imageEl) continue;
-                    
-                    if (imageURL) {
-                        // Verwende echtes Bild
-                        const img = document.createElement('img');
-                        img.src = imageURL;
-                        img.alt = recipe.name;
-                        img.style.width = '100%';
-                        img.style.height = '100%';
-                        img.style.objectFit = 'cover';
-                        
-                        imageEl.innerHTML = '';
-                        imageEl.appendChild(img);
-                        imageEl.classList.remove('gradient-1', 'gradient-2', 'gradient-3', 'gradient-4', 'gradient-5', 'gradient-6', 'gradient-7', 'gradient-8');
-                    } else {
-                        // Generiere Placeholder
-                        const placeholder = generatePlaceholderImage(recipe.name, getRecipeEmoji(recipe.name));
-                        const img = document.createElement('img');
-                        img.src = placeholder;
-                        img.alt = recipe.name;
-                        img.style.width = '100%';
-                        img.style.height = '100%';
-                        img.style.objectFit = 'cover';
-                        
-                        imageEl.innerHTML = '';
-                        imageEl.appendChild(img);
+            // Chrome iOS optimization: Load images in batches with IntersectionObserver
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const imageEl = entry.target;
+                        const recipeName = imageEl.dataset.recipe;
+                        loadSingleRecipeImage(recipeName, imageEl);
+                        observer.unobserve(imageEl);
                     }
-                } catch (error) {
-                    console.warn(`Bild für ${recipe.name} konnte nicht geladen werden:`, error);
+                });
+            }, {
+                root: null,
+                rootMargin: '50px', // Start loading 50px before visible
+                threshold: 0.01
+            });
+            
+            // Observe all recipe images
+            const recipeImages = document.querySelectorAll('[data-recipe]');
+            recipeImages.forEach(img => observer.observe(img));
+        }
+        
+        async function loadSingleRecipeImage(recipeName, imageEl) {
+            try {
+                const imageURL = await generator.getRecipeImageURL(recipeName);
+                const recipe = filteredRecipes.find(r => r.name === recipeName);
+                
+                if (!imageEl || !recipe) return;
+                
+                if (imageURL) {
+                    // Verwende echtes Bild
+                    const img = document.createElement('img');
+                    img.src = imageURL;
+                    img.alt = recipe.name;
+                    img.loading = 'lazy'; // Native lazy loading
+                    img.style.width = '100%';
+                    img.style.height = '100%';
+                    img.style.objectFit = 'cover';
+                    
+                    imageEl.innerHTML = '';
+                    imageEl.appendChild(img);
+                    imageEl.classList.remove('gradient-1', 'gradient-2', 'gradient-3', 'gradient-4', 'gradient-5', 'gradient-6', 'gradient-7', 'gradient-8');
+                } else {
+                    // Generiere Placeholder
+                    const placeholder = generatePlaceholderImage(recipe.name, getRecipeEmoji(recipe.name));
+                    const img = document.createElement('img');
+                    img.src = placeholder;
+                    img.alt = recipe.name;
+                    img.loading = 'lazy'; // Native lazy loading
+                    img.style.width = '100%';
+                    img.style.height = '100%';
+                    img.style.objectFit = 'cover';
+                    
+                    imageEl.innerHTML = '';
+                    imageEl.appendChild(img);
                 }
+            } catch (error) {
+                console.warn(`Bild für ${recipeName} konnte nicht geladen werden:`, error);
             }
         }
 

@@ -1,9 +1,12 @@
-/* Pinterest-Style Masonry Layout */
+/* Masonry Grid */
 
 .masonry-grid {
     column-count: 4;
     column-gap: 20px;
     padding: 0;
+    /* Chrome iOS performance optimization */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
 }
 
 .masonry-item {
@@ -21,6 +24,11 @@
     transition: all 0.3s ease;
     cursor: pointer;
     position: relative;
+    /* Chrome iOS hardware acceleration */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
 }
 
 .recipe-pin:hover {
@@ -41,6 +49,9 @@
     font-size: 5em;
     position: relative;
     overflow: hidden;
+    /* Better rendering on Chrome iOS */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
 }
 
 .recipe-pin-image::before {
@@ -132,17 +143,20 @@
     box-shadow: 0 5px 15px rgba(255,255,255,0.3);
 }
 
-/* Search & Filter Bar */
+/* Pinterest Header */
 .pinterest-header {
     position: sticky;
     top: 0;
-    background: rgba(255, 255, 255, 0.95);
+    background: rgba(255, 255, 255, 0.98);
     backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     z-index: 100;
     padding: 20px 0;
     margin-bottom: 30px;
     border-radius: 15px;
     box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    /* Chrome iOS fix for sticky positioning */
+    will-change: transform;
 }
 
 .search-container {
@@ -161,6 +175,10 @@
     border: 2px solid #e0e0e0;
     border-radius: 25px;
     transition: all 0.3s;
+    /* Better rendering on Chrome iOS */
+    -webkit-appearance: none;
+    appearance: none;
+    background-color: white;
 }
 
 .search-input:focus {
