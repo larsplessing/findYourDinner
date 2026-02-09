@@ -1,0 +1,140 @@
+/* iOS and Mobile Specific Optimizations */
+
+/* Prevent iOS from zooming on input focus */
+input,
+textarea,
+select {
+    font-size: 16px !important;
+}
+
+/* Better touch feedback for interactive elements */
+a,
+button,
+.recipe-pin,
+.category-chip {
+    -webkit-tap-highlight-color: rgba(102, 126, 234, 0.2);
+    touch-action: manipulation;
+}
+
+/* Smooth scrolling for iOS */
+* {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent text selection on double-tap */
+.recipe-pin,
+.category-chip,
+button {
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* Allow text selection in content areas */
+.recipe-pin-title,
+.ingredient-item,
+.instruction-item,
+.note-item {
+    -webkit-user-select: text;
+    user-select: text;
+}
+
+/* iOS safe area insets */
+@supports (padding: max(0px)) {
+    body {
+        padding-left: max(10px, env(safe-area-inset-left));
+        padding-right: max(10px, env(safe-area-inset-right));
+    }
+    
+    .pinterest-header {
+        padding-left: max(20px, env(safe-area-inset-left));
+        padding-right: max(20px, env(safe-area-inset-right));
+    }
+    
+    .random-fab {
+        right: max(20px, env(safe-area-inset-right));
+        bottom: max(20px, env(safe-area-inset-bottom));
+    }
+}
+
+/* Optimize for iPhone notch and home indicator */
+@media (max-width: 576px) {
+    .detail-container {
+        padding-bottom: max(20px, env(safe-area-inset-bottom));
+    }
+    
+    .upload-overlay .upload-card {
+        margin: max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
+    }
+}
+
+/* Improve readability on small screens */
+@media (max-width: 390px) {
+    /* iPhone 12 mini, iPhone SE */
+    h1 {
+        font-size: 1.6em !important;
+    }
+    
+    h2 {
+        font-size: 1.2em !important;
+    }
+    
+    .recipe-pin-title {
+        font-size: 0.95em !important;
+    }
+    
+    .search-input {
+        font-size: 15px !important;
+    }
+}
+
+/* Dark mode support (respects iOS system settings) */
+@media (prefers-color-scheme: dark) {
+    /* Currently keeping light theme, but prepared for dark mode */
+    /* Can be customized later if needed */
+}
+
+/* Reduced motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    button {
+        border: 2px solid currentColor;
+    }
+    
+    .recipe-pin {
+        border: 1px solid #ccc;
+    }
+}
+
+/* Optimize images for mobile */
+img {
+    max-width: 100%;
+    height: auto;
+    -webkit-user-drag: none;
+}
+
+/* Prevent bouncing on iOS when scrolling */
+html,
+body {
+    overscroll-behavior-y: none;
+}
+
+/* Better focus states for keyboard navigation */
+button:focus-visible,
+input:focus-visible,
+a:focus-visible {
+    outline: 3px solid #667eea;
+    outline-offset: 2px;
+}
+
+/* Loading state optimization for slower connections */
+@media (prefers-reduced-data: reduce) {
+    /* Could implement lower quality images or lazy loading here */
+}
