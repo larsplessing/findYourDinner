@@ -29,22 +29,52 @@ class RecipeGenerator {
             this.recipes = [];
             
             // Extrahiere Kategorien aus Inhaltsverzeichnis
-            const categories = this.extractCategories();
+            const { categoryMap, allRecipeNames } = this.extractCategories();
             
-            // Extrahiere Rezept-Details
+            // Set für vorhandene Sheets
+            const existingSheets = new Set();
+            
+            // Extrahiere Rezept-Details für vorhandene Sheets
             this.workbook.SheetNames.forEach((sheetName, index) => {
                 if (sheetName !== 'Inhaltsverzeichnis' && sheetName !== 'Vorlage') {
+                    existingSheets.add(sheetName);
                     const recipeDetails = this.extractRecipeDetails(sheetName);
                     this.recipes.push({
                         id: index,
                         name: sheetName,
                         sheetName: sheetName,
                         hasImage: false, // Wird später aktualisiert
-                        category: categories[sheetName] || 'Ohne Kategorie',
+                        category: categoryMap[sheetName] || 'Ohne Kategorie',
+                        isPlaceholder: false,
                         ...recipeDetails
                     });
                 }
             });
+
+            // Erstelle Placeholder-Rezepte für Rezepte die nur im Inhaltsverzeichnis stehen
+            let placeholderId = this.recipes.length;
+            for (const recipeName of allRecipeNames) {
+                if (!existingSheets.has(recipeName)) {
+                    // Rezept steht im Inhaltsverzeichnis, hat aber kein Sheet
+                    this.recipes.push({
+                        id: placeholderId++,
+                        name: recipeName,
+                        sheetName: null,
+                        hasImage: false,
+                        category: categoryMap[recipeName] || 'Ohne Kategorie',
+                        isPlaceholder: true,
+                        servings: null,
+                        ingredients: [],
+                        instructions: [{
+                            step: 1,
+                            text: 'Dieses Rezept ist noch nicht verfügbar. Es steht im Inhaltsverzeichnis, hat aber noch kein detailliertes Sheet.'
+                        }],
+                        createdDate: null,
+                        modifiedDate: null
+                    });
+                    console.log(`Placeholder erstellt für: ${recipeName}`);
+                }
+            }
 
             // Alphabetisch sortieren
             this.recipes.sort((a, b) => a.name.localeCompare(b.name, 'de'));
@@ -182,14 +212,15 @@ class RecipeGenerator {
 
     /**
      * Extrahiert Kategorien aus dem Inhaltsverzeichnis-Sheet
-     * @returns {Object} Map von RecipeName → Category
+     * @returns {Object} { categoryMap: Map von RecipeName → Category, allRecipeNames: Set aller Rezeptnamen }
      */
     extractCategories() {
         const categoryMap = {};
+        const allRecipeNames = new Set();
         
         if (!this.workbook || !this.workbook.Sheets['Inhaltsverzeichnis']) {
             console.warn('Inhaltsverzeichnis-Sheet nicht gefunden');
-            return categoryMap;
+            return { categoryMap, allRecipeNames };
         }
         
         const sheet = this.workbook.Sheets['Inhaltsverzeichnis'];
@@ -197,7 +228,7 @@ class RecipeGenerator {
         
         if (data.length < 3) {
             console.warn('Inhaltsverzeichnis hat zu wenige Zeilen');
-            return categoryMap;
+            return { categoryMap, allRecipeNames };
         }
         
         // Analysiere Spalten für Kategorien
@@ -227,13 +258,15 @@ class RecipeGenerator {
                 const recipeName = data[row][col];
                 
                 if (recipeName && recipeName.trim() !== '' && columnCategories[col]) {
-                    categoryMap[recipeName.trim()] = columnCategories[col];
+                    const cleanName = recipeName.trim();
+                    categoryMap[cleanName] = columnCategories[col];
+                    allRecipeNames.add(cleanName);
                 }
             }
         }
         
         console.log(`Kategorien extrahiert: ${Object.keys(categoryMap).length} Rezepte kategorisiert`);
-        return categoryMap;
+        return { categoryMap, allRecipeNames };
     }
 
     /**

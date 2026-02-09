@@ -125,6 +125,16 @@
                 categoryEl.style.display = 'inline-block';
             }
 
+            // Zeige Hinweis wenn Placeholder-Rezept
+            if (currentRecipe.isPlaceholder) {
+                const infoEl = document.getElementById('recipeMeta');
+                infoEl.innerHTML = `
+                    <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <strong>ℹ️ Hinweis:</strong> Dieses Rezept ist noch nicht vollständig erfasst.
+                    </div>
+                `;
+            }
+
             // Bild/Emoji
             const imageEl = document.getElementById('recipeImageMain');
             const thumbnailsEl = document.getElementById('imageThumbnails');
@@ -150,14 +160,37 @@
                     if (imageURLs.length > 1) {
                         displayThumbnails();
                     }
+                } else {
+                    // Kein Bild vorhanden - generiere Placeholder
+                    const placeholder = generatePlaceholderImage(currentRecipe.name, emoji);
+                    const img = document.createElement('img');
+                    img.src = placeholder;
+                    img.alt = currentRecipe.name;
+                    img.onload = () => {
+                        imageEl.innerHTML = '';
+                        imageEl.appendChild(img);
+                        imageEl.classList.remove('gradient-1', 'gradient-2', 'gradient-3', 'gradient-4', 'gradient-5', 'gradient-6', 'gradient-7', 'gradient-8');
+                    };
                 }
             } catch (error) {
                 console.warn('Bilder konnten nicht geladen werden:', error);
+                // Bei Fehler auch Placeholder verwenden
+                const placeholder = generatePlaceholderImage(currentRecipe.name, emoji);
+                const img = document.createElement('img');
+                img.src = placeholder;
+                img.alt = currentRecipe.name;
+                imageEl.innerHTML = '';
+                imageEl.appendChild(img);
+                imageEl.classList.remove('gradient-1', 'gradient-2', 'gradient-3', 'gradient-4', 'gradient-5', 'gradient-6', 'gradient-7', 'gradient-8');
             }
 
             // Meta-Informationen
             const metaEl = document.getElementById('recipeMeta');
-            metaEl.innerHTML = '';
+            
+            // Nur für Nicht-Placeholder oder falls bereits Hinweis gesetzt wurde
+            if (!currentRecipe.isPlaceholder) {
+                metaEl.innerHTML = '';
+            }
 
             if (currentRecipe.servings) {
                 metaEl.innerHTML += `
@@ -167,7 +200,7 @@
                 `;
             }
 
-            if (currentRecipe.ingredients && currentRecipe.ingredients.length > 0) {
+            if (currentRecipe.ingredients && currentRecipe.ingredients.length > 0 && !currentRecipe.isPlaceholder) {
                 metaEl.innerHTML += `
                     <div class="detail-meta-item">
                         📝 <strong>${currentRecipe.ingredients.length}</strong> Zutaten
@@ -175,7 +208,7 @@
                 `;
             }
 
-            if (currentRecipe.instructions && currentRecipe.instructions.length > 0) {
+            if (currentRecipe.instructions && currentRecipe.instructions.length > 0 && !currentRecipe.isPlaceholder) {
                 metaEl.innerHTML += `
                     <div class="detail-meta-item">
                         👨‍🍳 <strong>${currentRecipe.instructions.length}</strong> Schritte
@@ -341,6 +374,41 @@
                 localStorage.setItem('currentRecipe', random.name);
                 window.location.reload();
             }
+        }
+
+        function generatePlaceholderImage(recipeName, emoji) {
+            // Erstelle SVG Placeholder mit Emoji und Rezeptname
+            const hash = recipeName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+            
+            const colors = [
+                ['#667eea', '#764ba2'],
+                ['#f093fb', '#f5576c'],
+                ['#4facfe', '#00f2fe'],
+                ['#43e97b', '#38f9d7'],
+                ['#fa709a', '#fee140'],
+                ['#30cfd0', '#330867'],
+                ['#a8edea', '#fed6e3'],
+                ['#ff9a56', '#ff6a88']
+            ];
+            
+            const colorPair = colors[hash % colors.length];
+            const displayName = recipeName.length > 30 ? recipeName.substring(0, 27) + '...' : recipeName;
+            
+            const svg = `
+                <svg width="600" height="400" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="grad${hash}" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:${colorPair[0]};stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:${colorPair[1]};stop-opacity:1" />
+                        </linearGradient>
+                    </defs>
+                    <rect width="600" height="400" fill="url(#grad${hash})"/>
+                    <text x="300" y="200" font-size="140" text-anchor="middle" fill="white" opacity="0.9">${emoji}</text>
+                    <text x="300" y="310" font-size="28" text-anchor="middle" fill="white" font-weight="600" opacity="0.95">${displayName}</text>
+                </svg>
+            `;
+            
+            return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
         }
     </script>
 
