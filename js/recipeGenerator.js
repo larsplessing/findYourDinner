@@ -287,6 +287,7 @@ class RecipeGenerator {
             servings: null,
             ingredients: [],
             instructions: [],
+            notes: [],
             createdDate: null,
             modifiedDate: null
         };
@@ -327,6 +328,34 @@ class RecipeGenerator {
                 }
             }
             
+            // Bemerkungen/Notizen (eigener Bereich nach Zubereitung)
+            if (row[0] && String(row[0]).includes('Bemerkung') && String(row[0]).includes('Notiz')) {
+                // Gefunden! "Bemerkungen/Notizen" Header
+                // Lese alle folgenden Zeilen bis zur nächsten leeren Zeile
+                let j = i + 1;
+                while (j < data.length) {
+                    const noteRow = data[j];
+                    const noteText = noteRow[0]; // Links stehen in Spalte A
+                    
+                    // Stoppe bei leerer Zeile oder wenn alle Spalten leer sind
+                    if (!noteText || noteText.trim() === '') {
+                        // Prüfe ob wirklich komplett leer
+                        const hasContent = noteRow.some(cell => cell && String(cell).trim() !== '');
+                        if (!hasContent) {
+                            break;
+                        }
+                    }
+                    
+                    // Füge Notiz/Link hinzu wenn nicht leer
+                    if (noteText && String(noteText).trim() !== '') {
+                        details.notes.push(String(noteText).trim());
+                    }
+                    
+                    j++;
+                }
+                break;
+            }
+            
             // Zubereitung/Anleitung
             if (row[0] === 'Zubereitung' || row[0] === 'Anleitung') {
                 let j = i + 1;
@@ -345,7 +374,6 @@ class RecipeGenerator {
                     }
                     j++;
                 }
-                break;
             }
         }
         

@@ -110,6 +110,11 @@
     gap: 30px;
 }
 
+/* Notes Section im Full-Width Grid */
+#notesSection {
+    grid-column: 1 / -1;
+}
+
 .detail-section {
     background: white;
     border-radius: 20px;
@@ -223,6 +228,41 @@
     font-style: italic;
     text-align: center;
     padding: 40px;
+}
+
+/* Notes & Links Styles */
+.notes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.note-item {
+    padding: 15px 20px;
+    background: #f9f9f9;
+    border-left: 4px solid #667eea;
+    border-radius: 8px;
+    color: #333;
+    line-height: 1.6;
+    transition: all 0.3s ease;
+}
+
+.note-item:hover {
+    background: #f0f0f0;
+    transform: translateX(5px);
+}
+
+.note-link {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    word-break: break-all;
+}
+
+.note-link:hover {
+    color: #764ba2;
+    text-decoration: underline;
 }
 
 /* Print Styles */
