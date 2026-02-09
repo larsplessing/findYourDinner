@@ -189,11 +189,14 @@
 
 /* Upload Button Styles */
 .upload-btn .btn-icon,
-.upload-btn .btn-text {
+.upload-btn .btn-text,
+.shuffle-btn .btn-icon,
+.shuffle-btn .btn-text {
     display: inline;
 }
 
-.upload-btn .btn-icon {
+.upload-btn .btn-icon,
+.shuffle-btn .btn-icon {
     margin-right: 4px;
 }
 
@@ -314,6 +317,14 @@
         flex-shrink: 0;
         min-width: auto;
     }
+    
+    .secondary-btn.shuffle-btn {
+        padding: 10px 14px;
+        font-size: 0.85em;
+        white-space: nowrap;
+        flex-shrink: 0;
+        min-width: auto;
+    }
     }
     
     .masonry-item {
@@ -371,7 +382,8 @@
         padding: 0 12px;
     }
     
-    .primary-btn.upload-btn .btn-text {
+    .primary-btn.upload-btn .btn-text,
+    .secondary-btn.shuffle-btn .btn-text {
         font-size: 0.9em;
     }
 }
@@ -404,11 +416,25 @@
         justify-content: center;
     }
     
-    .primary-btn.upload-btn .btn-text {
+    .secondary-btn.shuffle-btn {
+        padding: 10px;
+        font-size: 1.2em;
+        min-width: 44px;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .primary-btn.upload-btn .btn-text,
+    .secondary-btn.shuffle-btn .btn-text {
         display: none;
     }
     
-    .primary-btn.upload-btn .btn-icon {
+    .primary-btn.upload-btn .btn-icon,
+    .secondary-btn.shuffle-btn .btn-icon {
         display: block;
         margin: 0;
     }

@@ -63,6 +63,10 @@
                     placeholder="Suche Rezepte..."
                     autocomplete="off"
                 />
+                <button class="secondary-btn shuffle-btn" onclick="shuffleRecipes()" title="Reihenfolge mischen">
+                    <span class="btn-icon">🔀</span>
+                    <span class="btn-text">Mischen</span>
+                </button>
                 <button class="primary-btn upload-btn" onclick="showUploadDialog()" title="Neu laden">
                     <span class="btn-icon">📂</span>
                     <span class="btn-text">Neu laden</span>
@@ -434,6 +438,16 @@
             if (random) {
                 openRecipe(random.name);
             }
+        }
+
+        function shuffleRecipes() {
+            // Fisher-Yates shuffle algorithm
+            filteredRecipes = [...filteredRecipes];
+            for (let i = filteredRecipes.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [filteredRecipes[i], filteredRecipes[j]] = [filteredRecipes[j], filteredRecipes[i]];
+            }
+            displayRecipes();
         }
 
         function openRecipe(recipeName) {
