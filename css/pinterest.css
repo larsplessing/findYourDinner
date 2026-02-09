@@ -187,6 +187,16 @@
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
+/* Upload Button Styles */
+.upload-btn .btn-icon,
+.upload-btn .btn-text {
+    display: inline;
+}
+
+.upload-btn .btn-icon {
+    margin-right: 4px;
+}
+
 .random-fab {
     position: fixed;
     bottom: 30px;
@@ -270,24 +280,40 @@
         top: 0;
         padding: 15px 0;
         margin-bottom: 20px;
+        border-radius: 12px;
+        overflow: hidden;
     }
     
     .search-container {
         flex-direction: row;
-        gap: 10px;
-        padding: 0 15px;
+        flex-wrap: nowrap;
+        gap: 8px;
+        padding: 0 12px;
+        align-items: center;
+        justify-content: space-between;
+        overflow: visible;
+    }
+    
+    .search-container h2 {
+        flex-shrink: 0;
+        font-size: 1.3em !important;
     }
     
     .search-input {
-        padding: 12px 16px;
+        padding: 10px 14px;
         font-size: 16px; /* Prevents zoom on iOS */
         border-radius: 20px;
+        flex: 1;
+        min-width: 0; /* Allow input to shrink */
     }
     
     .primary-btn {
-        padding: 12px 20px;
-        font-size: 0.95em;
+        padding: 10px 14px;
+        font-size: 0.85em;
         white-space: nowrap;
+        flex-shrink: 0;
+        min-width: auto;
+    }
     }
     
     .masonry-item {
@@ -337,3 +363,57 @@
 .gradient-6 { background: linear-gradient(135deg, #30cfd0 0%, #330867 100%); }
 .gradient-7 { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); }
 .gradient-8 { background: linear-gradient(135deg, #ff9a56 0%, #ff6a88 100%); }
+
+/* Medium small screens (between iPhone SE and standard phones) */
+@media (max-width: 430px) and (min-width: 391px) {
+    .search-container {
+        gap: 8px;
+        padding: 0 12px;
+    }
+    
+    .primary-btn.upload-btn .btn-text {
+        font-size: 0.9em;
+    }
+}
+
+/* Extra small screens (iPhone SE, small Android phones) */
+@media (max-width: 390px) {
+    .search-container {
+        gap: 6px;
+        padding: 0 10px;
+    }
+    
+    .search-container h2 {
+        font-size: 1.2em !important;
+    }
+    
+    .search-input {
+        padding: 10px 12px;
+        font-size: 15px;
+    }
+    
+    .primary-btn.upload-btn {
+        padding: 10px;
+        font-size: 1.2em;
+        min-width: 44px;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .primary-btn.upload-btn .btn-text {
+        display: none;
+    }
+    
+    .primary-btn.upload-btn .btn-icon {
+        display: block;
+        margin: 0;
+    }
+    
+    .pinterest-header {
+        padding: 12px 0;
+    }
+}
