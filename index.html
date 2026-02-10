@@ -97,7 +97,7 @@
         const generator = new RecipeGenerator();
         let allRecipes = [];
         let filteredRecipes = [];
-        let currentCategory = 'Alle';
+        let currentCategory = 'Mittagessen - Salzig';
 
         const searchInput = document.getElementById('searchInput');
         const masonryGrid = document.getElementById('masonryGrid');
@@ -121,7 +121,8 @@
                 allRecipes = generator.getAllRecipes();
                 filteredRecipes = [...allRecipes];
                 initializeCategoryFilter();
-                await displayRecipes();
+                // Wende Standard-Kategorie an
+                applyFilters('', currentCategory);
             } else {
                 // Versuche automatisch zu laden
                 try {
@@ -131,7 +132,8 @@
                     allRecipes = generator.getAllRecipes();
                     filteredRecipes = [...allRecipes];
                     initializeCategoryFilter();
-                    await displayRecipes();
+                    // Wende Standard-Kategorie an
+                    applyFilters('', currentCategory);
                 } catch (error) {
                     showUploadDialog();
                 }
@@ -154,7 +156,8 @@
                 filteredRecipes = [...allRecipes];
                 uploadOverlay.style.display = 'none';
                 initializeCategoryFilter();
-                await displayRecipes();
+                // Wende Standard-Kategorie an
+                applyFilters('', currentCategory);
                 
                 const stats = await generator.getStats();
                 console.log(`✓ ${stats.total} Rezepte geladen, ${stats.withImages} mit Bildern`);
@@ -421,12 +424,16 @@
                 return;
             }
             
+            // Prüfe ob Standard-Kategorie existiert
+            const defaultCategoryExists = categories.includes(currentCategory);
+            
             // Baue Category Chips
-            let html = '<button class="category-chip active" data-category="Alle" onclick="filterByCategory(\'Alle\')">Alle</button>';
+            let html = `<button class="category-chip ${!defaultCategoryExists ? 'active' : ''}" data-category="Alle" onclick="filterByCategory('Alle')">Alle</button>`;
             
             categories.forEach(category => {
                 const escapedCategory = category.replace(/'/g, "\\'");
-                html += `<button class="category-chip" data-category="${category}" onclick="filterByCategory('${escapedCategory}')">${category}</button>`;
+                const isActive = category === currentCategory && defaultCategoryExists ? 'active' : '';
+                html += `<button class="category-chip ${isActive}" data-category="${category}" onclick="filterByCategory('${escapedCategory}')">${category}</button>`;
             });
             
             categoryFilter.innerHTML = html;
