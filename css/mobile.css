@@ -120,10 +120,10 @@ img {
     -webkit-user-drag: none;
 }
 
-/* Prevent bouncing on iOS when scrolling */
+/* Allow pull-to-refresh on iOS */
 html,
 body {
-    overscroll-behavior-y: none;
+    overscroll-behavior-y: auto;
 }
 
 /* Better focus states for keyboard navigation */
