@@ -48,6 +48,9 @@
                         <button class="primary-btn" onclick="printRecipe()">
                             🖨️ Drucken
                         </button>
+                        <button class="secondary-btn" id="wakeLockBtn" onclick="toggleWakeLock()">
+                            <span id="wakeLockIcon">☀️</span> <span id="wakeLockText">Display wach</span>
+                        </button>
                         <button class="secondary-btn" onclick="selectRandomRecipe()">
                             🎲 Anderes Rezept
                         </button>
@@ -59,7 +62,17 @@
         <div class="detail-content">
             <!-- Zutaten -->
             <div class="detail-section">
-                <h2>📝 Zutaten</h2>
+                <div class="ingredients-header">
+                    <h2>📝 Zutaten</h2>
+                    <div class="portion-scaler" id="portionScaler" style="display: none;">
+                        <button class="portion-btn" onclick="adjustPortions(-1)">−</button>
+                        <div class="portion-display">
+                            <span id="currentPortions">4</span> Portionen
+                        </div>
+                        <button class="portion-btn" onclick="adjustPortions(1)">+</button>
+                        <button class="portion-reset" onclick="resetPortions()" title="Zurücksetzen">↺</button>
+                    </div>
+                </div>
                 <ul class="ingredients-list" id="ingredientsList">
                     <li class="no-data">Lade Zutaten...</li>
                 </ul>
@@ -91,6 +104,15 @@
         let currentRecipe = null;
         let allImages = [];
         let currentImageIndex = 0;
+        
+        // Portion Scaler State
+        let originalServings = null;
+        let currentServings = null;
+        let originalIngredients = [];
+        
+        // Wake Lock State
+        let wakeLock = null;
+        let wakeLockSupported = 'wakeLock' in navigator;
 
         window.addEventListener('load', async () => {
             // Lade Rezepte aus LocalStorage
@@ -231,6 +253,9 @@
 
             // Zutaten
             displayIngredients();
+            
+            // Initialisiere Portion Scaler
+            initializePortionScaler();
 
             // Anleitung
             displayInstructions();
@@ -460,6 +485,204 @@
             
             return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
         }
+
+        // ========================================
+        // Wake Lock Funktionalität
+        // ========================================
+
+        /**
+         * Toggle Wake Lock on/off
+         */
+        async function toggleWakeLock() {
+            if (wakeLock !== null) {
+                // Bereits aktiv - deaktiviere
+                await releaseWakeLock();
+            } else {
+                // Aktiviere Wake Lock
+                await requestWakeLock();
+            }
+        }
+
+        /**
+         * Aktiviert Wake Lock
+         */
+        async function requestWakeLock() {
+            if (!wakeLockSupported) {
+                // Fallback für Browser ohne Wake Lock API
+                showWakeLockFallbackMessage();
+                return;
+            }
+
+            try {
+                wakeLock = await navigator.wakeLock.request('screen');
+                console.log('Wake Lock aktiviert');
+                
+                // Update UI
+                updateWakeLockButton(true);
+                
+                // Event Listener für automatische Freigabe (Tab-Wechsel, etc.)
+                wakeLock.addEventListener('release', () => {
+                    console.log('Wake Lock automatisch freigegeben');
+                    wakeLock = null;
+                    updateWakeLockButton(false);
+                });
+                
+            } catch (err) {
+                console.error('Wake Lock Fehler:', err);
+                showWakeLockFallbackMessage();
+            }
+        }
+
+        /**
+         * Deaktiviert Wake Lock
+         */
+        async function releaseWakeLock() {
+            if (wakeLock !== null) {
+                await wakeLock.release();
+                wakeLock = null;
+                updateWakeLockButton(false);
+                console.log('Wake Lock deaktiviert');
+            }
+        }
+
+        /**
+         * Update Button UI
+         */
+        function updateWakeLockButton(active) {
+            const btn = document.getElementById('wakeLockBtn');
+            const icon = document.getElementById('wakeLockIcon');
+            const text = document.getElementById('wakeLockText');
+            
+            if (active) {
+                icon.textContent = '🔆';
+                text.textContent = 'Display aktiv';
+                btn.style.background = 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)';
+                btn.style.color = 'white';
+            } else {
+                icon.textContent = '☀️';
+                text.textContent = 'Display wach';
+                btn.style.background = '';
+                btn.style.color = '';
+            }
+        }
+
+        /**
+         * Fallback Nachricht für Browser ohne Wake Lock Support
+         */
+        function showWakeLockFallbackMessage() {
+            alert('Wake Lock wird von deinem Browser nicht unterstützt.\n\nTipp: Gehe zu deinen Geräteeinstellungen und stelle die Display-Timeout Zeit manuell ein.');
+        }
+
+        // Cleanup beim Verlassen der Seite
+        window.addEventListener('beforeunload', () => {
+            if (wakeLock !== null) {
+                wakeLock.release();
+            }
+        });
+
+        /**
+         * Passt Portionen an (+1 oder -1)
+         */
+        function adjustPortions(delta) {
+            if (currentServings === null || originalServings === null) return;
+            
+            const newServings = currentServings + delta;
+            
+            // Minimum 1 Portion
+            if (newServings < 1) return;
+            
+            currentServings = newServings;
+            updatePortionsDisplay();
+            scaleIngredients();
+        }
+
+        /**
+         * Setzt Portionen auf Original zurück
+         */
+        function resetPortions() {
+            if (originalServings === null) return;
+            
+            currentServings = originalServings;
+            updatePortionsDisplay();
+            scaleIngredients();
+        }
+
+        /**
+         * Update Portion Display
+         */
+        function updatePortionsDisplay() {
+            const display = document.getElementById('currentPortions');
+            if (display) {
+                display.textContent = currentServings;
+            }
+        }
+
+        /**
+         * Skaliert Zutaten basierend auf aktuellen Portionen
+         */
+        function scaleIngredients() {
+            if (originalServings === null || currentServings === null) return;
+            
+            const scaleFactor = currentServings / originalServings;
+            const listEl = document.getElementById('ingredientsList');
+            
+            if (!listEl) return;
+            
+            listEl.innerHTML = '';
+            
+            originalIngredients.forEach(ingredient => {
+                const li = document.createElement('li');
+                li.className = 'ingredient-item';
+                
+                // Skaliere Menge wenn numerisch
+                let scaledAmount = ingredient.amount;
+                if (ingredient.amount) {
+                    const amountNum = parseFloat(ingredient.amount);
+                    if (!isNaN(amountNum)) {
+                        scaledAmount = (amountNum * scaleFactor).toFixed(1);
+                        // Entferne .0 bei ganzen Zahlen
+                        if (scaledAmount.endsWith('.0')) {
+                            scaledAmount = scaledAmount.slice(0, -2);
+                        }
+                    }
+                }
+                
+                li.innerHTML = `
+                    <span class="ingredient-amount">${scaledAmount || ''}</span>
+                    <span class="ingredient-unit">${ingredient.unit || ''}</span>
+                    <span class="ingredient-product">${ingredient.product}</span>
+                    ${ingredient.note ? `<span class="ingredient-note">${ingredient.note}</span>` : ''}
+                `;
+                
+                listEl.appendChild(li);
+            });
+        }
+
+        /**
+         * Initialisiert Portion Scaler
+         */
+        function initializePortionScaler() {
+            if (!currentRecipe || !currentRecipe.servings) {
+                // Kein Servings-Info vorhanden
+                document.getElementById('portionScaler').style.display = 'none';
+                return;
+            }
+            
+            originalServings = currentRecipe.servings
+            
+            if (originalServings === null) {
+                // Konnte keine Zahl extrahieren
+                document.getElementById('portionScaler').style.display = 'none';
+                return;
+            }
+            
+            currentServings = originalServings;
+            originalIngredients = JSON.parse(JSON.stringify(currentRecipe.ingredients || []));
+            
+            // Zeige Scaler
+            document.getElementById('portionScaler').style.display = 'flex';
+            updatePortionsDisplay();
+        }
     </script>
 
     <style>
@@ -584,6 +807,118 @@
         .gradient-6 { background: linear-gradient(135deg, #30cfd0 0%, #330867 100%); }
         .gradient-7 { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); }
         .gradient-8 { background: linear-gradient(135deg, #ff9a56 0%, #ff6a88 100%); }
+
+        /* Portion Scaler Styles */
+        .ingredients-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .ingredients-header h2 {
+            margin: 0;
+        }
+
+        .portion-scaler {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(102, 126, 234, 0.05);
+            padding: 8px 12px;
+            border-radius: 25px;
+            border: 2px solid rgba(102, 126, 234, 0.2);
+        }
+
+        .portion-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            font-size: 1.2em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .portion-btn:hover {
+            background: #667eea;
+            color: white;
+            transform: scale(1.1);
+        }
+
+        .portion-btn:active {
+            transform: scale(0.95);
+        }
+
+        .portion-display {
+            font-weight: 600;
+            color: #667eea;
+            min-width: 100px;
+            text-align: center;
+            font-size: 0.95em;
+        }
+
+        .portion-display span {
+            font-size: 1.3em;
+            font-weight: 700;
+        }
+
+        .portion-reset {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 2px solid #ff9800;
+            background: white;
+            color: #ff9800;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            margin-left: 5px;
+        }
+
+        .portion-reset:hover {
+            background: #ff9800;
+            color: white;
+            transform: scale(1.1);
+        }
+
+        .portion-reset:active {
+            transform: scale(0.95);
+        }
+
+        /* Mobile responsive for portion scaler */
+        @media (max-width: 768px) {
+            .ingredients-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .portion-scaler {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+
+        /* Wake Lock Button Active State */
+        #wakeLockBtn {
+            transition: all 0.3s ease;
+        }
+    
     </style>
 </body>
 </html>
