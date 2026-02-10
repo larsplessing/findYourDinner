@@ -44,9 +44,14 @@
             <div class="upload-card">
                 <h1>🍳 Was koche ich heute?</h1>
                 <p>Lade deine Rezepte.xlsx, um zu starten</p>
-                <label for="fileInput" class="file-label">
-                    📂 Rezepte laden
-                </label>
+                <div>
+                    <label for="fileInput" class="file-label">
+                        📂 Rezepte laden
+                    </label>
+                    <buttton style="margin-top: 10px;" class="file-label" onclick="closeUploadOverlay()" title="Zurück">
+                        <span class="back-arrow">←</span> Zurück
+                    </buttton>
+                </div>
                 <input type="file" id="fileInput" accept=".xlsx,.xls" />
                 <div id="uploadStatus" class="upload-status"></div>
                 <div id="progressContainer" class="progress-container" style="display: none;">
@@ -475,6 +480,16 @@
             progressContainer.style.display = 'none';
         }
 
+        function closeUploadOverlay() {
+            // Verstecke Upload-Overlay
+            uploadOverlay.style.display = 'none';
+            
+            // Wenn Rezepte vorhanden sind, zeige sie an
+            if (allRecipes.length > 0) {
+                displayRecipes();
+            }
+        }
+
         // Keyboard Shortcuts
         document.addEventListener('keydown', (e) => {
             if (e.key === 'r' || e.key === 'R') {
@@ -499,6 +514,7 @@
         }
 
         .upload-card {
+            position: relative;
             height: fit-content;
             background: white;
             border-radius: 20px;
@@ -529,7 +545,7 @@
 
         .file-label {
             display: inline-block;
-            padding: 15px 40px;
+            padding: 8px 14px;
             font-size: 1.2em;
             border-radius: 10px;
             cursor: pointer;
@@ -644,6 +660,23 @@
             font-size: 0.75em;
             font-weight: 600;
             margin-bottom: 8px;
+        }
+
+        /* Mobile Styles für Upload Overlay */
+        @media (max-width: 576px) {
+            .upload-card {
+                padding: 40px 30px;
+                margin: 20px;
+            }
+
+            .upload-card h1 {
+                font-size: 1.8em;
+                margin-top: 30px;
+            }
+
+            .upload-card p {
+                font-size: 1em;
+            }
         }
     </style>
 </body>
