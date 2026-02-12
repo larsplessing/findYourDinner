@@ -84,9 +84,9 @@ class XMLParser {
     }
 
     /**
-     * Erstellt vollständiges Sheet → Image Mapping
+     * Erstellt vollständiges Sheet → Image Mapping mit Transformationen
      * @param {JSZip} zip - JSZip Instanz der Excel-Datei
-     * @returns {Promise<Object>} Map von SheetName → ImagePath[] (Array von Pfaden)
+     * @returns {Promise<Object>} Map von SheetName → Array von {path, transform}
      */
     static async createSheetImageMapping(zip) {
         const mapping = {};
@@ -111,7 +111,13 @@ class XMLParser {
                 
                 if (!drawingPath) continue;
 
-                // 4. Lese Drawing-Relationships
+                // 4. Lese Drawing XML für Transformationen
+                const drawingFile = zip.file(drawingPath);
+                if (!drawingFile) continue;
+                
+                const drawingXML = await drawingFile.async('text');
+
+                // 5. Lese Drawing-Relationships für Bild-Pfade
                 const drawingRelsPath = drawingPath.replace('/drawings/', '/drawings/_rels/') + '.rels';
                 const drawingRelsFile = zip.file(drawingRelsPath);
                 
@@ -120,9 +126,15 @@ class XMLParser {
                 const drawingRelsXML = await drawingRelsFile.async('text');
                 const imagePaths = this.extractImagePaths(drawingRelsXML);
 
-                // 5. Speichere ALLE Bilder (nicht nur das erste!)
+                // 6. Extrahiere Transformationen aus Drawing XML
+                const imageTransforms = this.extractImageTransforms(drawingXML, imagePaths.length);
+
+                // 7. Kombiniere Pfade mit Transformationen
                 if (imagePaths.length > 0) {
-                    mapping[sheet.name] = imagePaths; // Jetzt Array statt einzelner Pfad
+                    mapping[sheet.name] = imagePaths.map((path, index) => ({
+                        path: path,
+                        transform: imageTransforms[index] || this.getDefaultTransform()
+                    }));
                 }
             }
 
@@ -176,6 +188,107 @@ class XMLParser {
         };
 
         return mimeTypes[extension.toLowerCase()] || 'image/png';
+    }
+
+    /**
+     * Extrahiert Bild-Transformationen aus Drawing XML
+     * @param {string} drawingXML - Inhalt von xl/drawings/drawing*.xml
+     * @param {number} imageCount - Anzahl der erwarteten Bilder
+     * @returns {Array<Object>} Array von Transformations-Objekten
+     */
+    static extractImageTransforms(drawingXML, imageCount) {
+        const transforms = [];
+        const doc = this.parseXML(drawingXML);
+        
+        // Suche alle <xdr:pic> Elemente (einzelne Bilder)
+        const pics = doc.getElementsByTagName('xdr:pic');
+        
+        for (let i = 0; i < pics.length && i < imageCount; i++) {
+            const pic = pics[i];
+            const transform = this.extractSingleImageTransform(pic);
+            transforms.push(transform);
+        }
+        
+        return transforms;
+    }
+
+    /**
+     * Extrahiert Transformation eines einzelnen Bildes
+     * @param {Element} picElement - <xdr:pic> XML Element
+     * @returns {Object} Transformations-Objekt
+     */
+    static extractSingleImageTransform(picElement) {
+        const transform = this.getDefaultTransform();
+        
+        try {
+            // 1. Suche <xdr:spPr> für Shape-Properties (enthält Rotation/Flip)
+            const spPr = picElement.getElementsByTagName('xdr:spPr')[0];
+            if (spPr) {
+                const xfrm = spPr.getElementsByTagName('a:xfrm')[0];
+                if (xfrm) {
+                    // Rotation aus rot attribute
+                    if (xfrm.hasAttribute('rot')) {
+                        const rotValue = parseInt(xfrm.getAttribute('rot'));
+                        // Excel speichert Rotation in 60000stel Grad
+                        transform.rotation = rotValue / 60000;
+                    }
+                    
+                    // Flip aus flipH und flipV attributes
+                    if (xfrm.hasAttribute('flipH')) {
+                        transform.flipH = xfrm.getAttribute('flipH') === '1';
+                    }
+                    if (xfrm.hasAttribute('flipV')) {
+                        transform.flipV = xfrm.getAttribute('flipV') === '1';
+                    }
+                }
+            }
+            
+            // 2. Cropping aus <xdr:blipFill> oder <a:blipFill>
+            const blipFill = picElement.getElementsByTagName('xdr:blipFill')[0];
+            
+            if (blipFill) {
+                const srcRect = blipFill.getElementsByTagName('a:srcRect')[0];
+                if (srcRect && srcRect.attributes.length > 0) {
+                    // srcRect attributes: l, t, r, b (left, top, right, bottom)
+                    // Werte sind in Prozent * 1000 (z.B. 10000 = 10%)
+                    if (srcRect.hasAttribute('l')) {
+                        transform.crop.left = parseInt(srcRect.getAttribute('l')) / 1000;
+                    }
+                    if (srcRect.hasAttribute('t')) {
+                        transform.crop.top = parseInt(srcRect.getAttribute('t')) / 1000;
+                    }
+                    if (srcRect.hasAttribute('r')) {
+                        transform.crop.right = parseInt(srcRect.getAttribute('r')) / 1000;
+                    }
+                    if (srcRect.hasAttribute('b')) {
+                        transform.crop.bottom = parseInt(srcRect.getAttribute('b')) / 1000;
+                    }
+                }
+            }
+            
+        } catch (error) {
+            console.warn('Fehler beim Extrahieren der Transformation:', error);
+        }
+        
+        return transform;
+    }
+
+    /**
+     * Gibt Standard-Transformation zurück (keine Änderungen)
+     * @returns {Object} Standard-Transformations-Objekt
+     */
+    static getDefaultTransform() {
+        return {
+            rotation: 0,        // Grad (0-360)
+            flipH: false,       // Horizontal gespiegelt
+            flipV: false,       // Vertikal gespiegelt
+            crop: {
+                left: 0,        // Prozent von links
+                top: 0,         // Prozent von oben
+                right: 0,       // Prozent von rechts
+                bottom: 0       // Prozent von unten
+            }
+        };
     }
 }
 

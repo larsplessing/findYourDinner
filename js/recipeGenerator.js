@@ -141,48 +141,50 @@ class RecipeGenerator {
         const arrayBuffer = await file.arrayBuffer();
         const zip = await JSZip.loadAsync(arrayBuffer);
 
-        // Erstelle Sheet → Image Mapping (jetzt mit Array von Bildern!)
+        // Erstelle Sheet → Image Mapping (jetzt mit Transformationen!)
         if (progressCallback) progressCallback({ phase: 'images', progress: 10, message: 'Analysiere Bilder...' });
         
         const mapping = await XMLParser.createSheetImageMapping(zip);
         const totalSheets = Object.keys(mapping).length;
         
         let totalImages = 0;
-        Object.values(mapping).forEach(imagePaths => {
-            totalImages += imagePaths.length;
+        Object.values(mapping).forEach(imageDataArray => {
+            totalImages += imageDataArray.length;
         });
         
         console.log(`Gefunden: ${totalImages} Bilder für ${totalSheets} Rezepte`);
 
-        // Extrahiere und speichere Bilder
+        // Extrahiere und speichere Bilder mit Transformationen
         let processedSheets = 0;
         let processedImages = 0;
         
-        for (const [recipeName, imagePaths] of Object.entries(mapping)) {
+        for (const [recipeName, imageData] of Object.entries(mapping)) {
             try {
                 const imageBlobs = [];
+                const transforms = [];
                 
                 // Lade alle Bilder für dieses Rezept
-                for (const imagePath of imagePaths) {
-                    const imageFile = zip.file(imagePath);
+                for (const imgData of imageData) {
+                    const imageFile = zip.file(imgData.path);
                     if (!imageFile) {
-                        console.warn(`Bild nicht gefunden: ${imagePath}`);
+                        console.warn(`Bild nicht gefunden: ${imgData.path}`);
                         continue;
                     }
 
                     // Konvertiere zu Blob
-                    const imageData = await imageFile.async('arraybuffer');
-                    const extension = XMLParser.getFileExtension(imagePath);
+                    const imageArrayBuffer = await imageFile.async('arraybuffer');
+                    const extension = XMLParser.getFileExtension(imgData.path);
                     const mimeType = XMLParser.getMimeType(extension);
-                    const imageBlob = new Blob([imageData], { type: mimeType });
+                    const imageBlob = new Blob([imageArrayBuffer], { type: mimeType });
                     
                     imageBlobs.push(imageBlob);
+                    transforms.push(imgData.transform);
                     processedImages++;
                 }
 
-                // Speichere alle Bilder in IndexedDB
+                // Speichere alle Bilder mit Transformationen in IndexedDB
                 if (imageBlobs.length > 0) {
-                    await this.imageStore.saveImage(recipeName, imageBlobs);
+                    await this.imageStore.saveImage(recipeName, imageBlobs, transforms);
 
                     // Aktualisiere Recipe-Objekt
                     const recipe = this.recipes.find(r => r.name === recipeName);
@@ -390,9 +392,9 @@ class RecipeGenerator {
     }
 
     /**
-     * Gibt ein Bild-URL für ein Rezept zurück (aus IndexedDB) - erstes Bild
+     * Gibt ein Bild-URL für ein Rezept zurück (aus IndexedDB) - erstes Bild mit Transformation
      * @param {string} recipeName - Name des Rezepts
-     * @returns {Promise<string|null>} Data URL des Bildes oder null
+     * @returns {Promise<{dataUrl: string, transform: Object}|null>} Objekt mit dataUrl und transform oder null
      */
     async getRecipeImageURL(recipeName) {
         if (!this.imageStore) return null;
@@ -406,9 +408,9 @@ class RecipeGenerator {
     }
 
     /**
-     * Gibt ALLE Bild-URLs für ein Rezept zurück (aus IndexedDB)
+     * Gibt ALLE Bild-URLs für ein Rezept zurück (aus IndexedDB) mit Transformationen
      * @param {string} recipeName - Name des Rezepts
-     * @returns {Promise<string[]>} Array von Data URLs
+     * @returns {Promise<Array<{dataUrl: string, transform: Object}>>} Array von Objekten mit dataUrl und transform
      */
     async getAllRecipeImageURLs(recipeName) {
         if (!this.imageStore) return [];

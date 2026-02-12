@@ -40,18 +40,25 @@ class ImageStore {
     }
 
     /**
-     * Speichert ein oder mehrere Bilder für ein Rezept
+     * Speichert ein oder mehrere Bilder für ein Rezept mit Transformationen
      * @param {string} recipeName - Name des Rezepts
      * @param {Blob|Blob[]} imageBlob - Bild als Blob oder Array von Blobs
+     * @param {Object|Object[]} transforms - Transformations-Daten (optional)
      * @returns {Promise<void>}
      */
-    async saveImage(recipeName, imageBlob) {
+    async saveImage(recipeName, imageBlob, transforms = null) {
         if (!this.db) {
             await this.init();
         }
 
         // Normalisiere zu Array
         const imageBlobs = Array.isArray(imageBlob) ? imageBlob : [imageBlob];
+        const transformsArray = transforms ? (Array.isArray(transforms) ? transforms : [transforms]) : [];
+
+        // Fülle fehlende Transformationen mit Default-Werten
+        while (transformsArray.length < imageBlobs.length) {
+            transformsArray.push(this.getDefaultTransform());
+        }
 
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction([this.storeName], 'readwrite');
@@ -59,7 +66,8 @@ class ImageStore {
 
             const request = store.put({
                 recipeName: recipeName,
-                imageBlobs: imageBlobs, // Jetzt Array!
+                imageBlobs: imageBlobs,
+                transforms: transformsArray, // NEU: Transformations-Metadaten
                 timestamp: new Date().toISOString()
             });
 
@@ -141,39 +149,133 @@ class ImageStore {
     }
 
     /**
-     * Gibt ein Bild als Data URL zurück (erstes Bild)
+     * Gibt ein Bild als Data URL zurück (erstes Bild) mit Transformation
      * @param {string} recipeName - Name des Rezepts
-     * @returns {Promise<string|null>} Data URL oder null
+     * @returns {Promise<{dataUrl: string, transform: Object}|null>} Objekt mit dataUrl und transform oder null
      */
     async getImageDataURL(recipeName) {
-        const blob = await this.getImage(recipeName);
-        if (!blob) return null;
+        if (!this.db) {
+            await this.init();
+        }
 
-        return new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.readAsDataURL(blob);
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([this.storeName], 'readonly');
+            const store = transaction.objectStore(this.storeName);
+            const request = store.get(recipeName);
+
+            request.onsuccess = () => {
+                const result = request.result;
+                if (!result) {
+                    resolve(null);
+                    return;
+                }
+                
+                let blob = null;
+                let transform = this.getDefaultTransform();
+                
+                // Unterstütze alte (imageBlob) und neue (imageBlobs[]) Struktur
+                if (result.imageBlobs && result.imageBlobs.length > 0) {
+                    blob = result.imageBlobs[0];
+                    if (result.transforms && result.transforms.length > 0) {
+                        transform = result.transforms[0];
+                    }
+                } else if (result.imageBlob) {
+                    blob = result.imageBlob;
+                    transform = result.transform || this.getDefaultTransform();
+                }
+                
+                if (!blob) {
+                    resolve(null);
+                    return;
+                }
+                
+                const reader = new FileReader();
+                reader.onloadend = () => resolve({
+                    dataUrl: reader.result,
+                    transform: transform
+                });
+                reader.readAsDataURL(blob);
+            };
+
+            request.onerror = () => reject(new Error(`Fehler beim Laden von ${recipeName}`));
         });
     }
 
     /**
-     * Gibt ALLE Bilder als Data URLs zurück
+     * Gibt Standard-Transformation zurück (keine Änderungen)
+     * @returns {Object} Standard-Transformations-Objekt
+     */
+    getDefaultTransform() {
+        return {
+            rotation: 0,
+            flipH: false,
+            flipV: false,
+            crop: {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0
+            }
+        };
+    }
+
+    /**
+     * Gibt ALLE Bilder als Data URLs zurück mit Transformationen
      * @param {string} recipeName - Name des Rezepts
-     * @returns {Promise<string[]>} Array von Data URLs
+     * @returns {Promise<Array<{dataUrl: string, transform: Object}>>} Array von Objekten mit dataUrl und transform
      */
     async getAllImageDataURLs(recipeName) {
-        const blobs = await this.getAllImages(recipeName);
-        if (blobs.length === 0) return [];
+        if (!this.db) {
+            await this.init();
+        }
 
-        const dataURLPromises = blobs.map(blob => {
-            return new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
-                reader.readAsDataURL(blob);
-            });
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction([this.storeName], 'readonly');
+            const store = transaction.objectStore(this.storeName);
+            const request = store.get(recipeName);
+
+            request.onsuccess = async () => {
+                const result = request.result;
+                if (!result) {
+                    resolve([]);
+                    return;
+                }
+                
+                // Hole Blobs und Transformationen
+                let blobs = [];
+                let transforms = [];
+                
+                if (result.imageBlobs && result.imageBlobs.length > 0) {
+                    blobs = result.imageBlobs;
+                    transforms = result.transforms || [];
+                } else if (result.imageBlob) {
+                    blobs = [result.imageBlob];
+                    transforms = [result.transform || this.getDefaultTransform()];
+                }
+                
+                // Fülle fehlende Transformationen
+                while (transforms.length < blobs.length) {
+                    transforms.push(this.getDefaultTransform());
+                }
+                
+                // Konvertiere Blobs zu Data URLs
+                const dataURLPromises = blobs.map((blob, index) => {
+                    return new Promise((resolveUrl) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolveUrl({
+                            dataUrl: reader.result,
+                            transform: transforms[index]
+                        });
+                        reader.readAsDataURL(blob);
+                    });
+                });
+
+                const results = await Promise.all(dataURLPromises);
+                resolve(results);
+            };
+
+            request.onerror = () => reject(new Error(`Fehler beim Laden von ${recipeName}`));
         });
-
-        return Promise.all(dataURLPromises);
     }
 
     /**
@@ -265,7 +367,7 @@ class ImageStore {
 
     /**
      * Speichert mehrere Bilder auf einmal
-     * @param {Object} imageMap - Map von recipeName → Blob oder Blob[]
+     * @param {Object} imageMap - Map von recipeName → {blobs, transforms}
      * @param {Function} progressCallback - Fortschritts-Callback (optional)
      * @returns {Promise<{success: number, failed: number}>}
      */
@@ -274,9 +376,14 @@ class ImageStore {
         let failed = 0;
         const total = Object.keys(imageMap).length;
 
-        for (const [recipeName, imageBlob] of Object.entries(imageMap)) {
+        for (const [recipeName, data] of Object.entries(imageMap)) {
             try {
-                await this.saveImage(recipeName, imageBlob); // unterstützt jetzt Blob oder Blob[]
+                // data kann {blobs, transforms} oder direkt Blob/Blob[] sein
+                if (data.blobs) {
+                    await this.saveImage(recipeName, data.blobs, data.transforms);
+                } else {
+                    await this.saveImage(recipeName, data);
+                }
                 success++;
             } catch (error) {
                 console.error(`Fehler beim Speichern von ${recipeName}:`, error);

@@ -195,17 +195,17 @@
 
             // Versuche alle Bilder zu laden
             try {
-                const imageURLs = await generator.getAllRecipeImageURLs(currentRecipe.name);
+                const imageDataArray = await generator.getAllRecipeImageURLs(currentRecipe.name);
                 
-                if (imageURLs && imageURLs.length > 0) {
-                    allImages = imageURLs;
+                if (imageDataArray && imageDataArray.length > 0) {
+                    allImages = imageDataArray; // Jetzt Array von {dataUrl, transform}
                     currentImageIndex = 0;
                     
                     // Zeige erstes Bild
                     displayImage(0);
                     
                     // Wenn mehrere Bilder vorhanden, zeige Thumbnails
-                    if (imageURLs.length > 1) {
+                    if (imageDataArray.length > 1) {
                         displayThumbnails();
                     }
                 } else {
@@ -283,15 +283,61 @@
             currentImageIndex = index;
             const imageEl = document.getElementById('recipeImageMain');
             
+            // Hole Bild-Daten mit Transformation
+            const imageData = allImages[index];
+            
             // Ersetze mit echtem Bild
             const img = document.createElement('img');
-            img.src = allImages[index];
+            img.src = imageData.dataUrl;
             img.alt = currentRecipe.name;
             img.onload = () => {
                 imageEl.innerHTML = '';
                 imageEl.appendChild(img);
                 imageEl.classList.remove('gradient-1', 'gradient-2', 'gradient-3', 'gradient-4', 'gradient-5', 'gradient-6', 'gradient-7', 'gradient-8');
+                
+                // Wende Transformationen an
+                applyImageTransform(img, imageData.transform);
             };
+        }
+
+        /**
+         * Wendet CSS-Transformationen auf ein Bild-Element an
+         * @param {HTMLImageElement} imgElement - Das Bild-Element
+         * @param {Object} transform - Transformations-Objekt
+         */
+        function applyImageTransform(imgElement, transform) {
+            if (!transform) return;
+            
+            const transforms = [];
+            
+            // Rotation
+            if (transform.rotation && transform.rotation !== 0) {
+                transforms.push(`rotate(${transform.rotation}deg)`);
+            }
+            
+            // Spiegelung
+            let scaleX = transform.flipH ? -1 : 1;
+            let scaleY = transform.flipV ? -1 : 1;
+            if (scaleX !== 1 || scaleY !== 1) {
+                transforms.push(`scale(${scaleX}, ${scaleY})`);
+            }
+            
+            // CSS Transform anwenden
+            if (transforms.length > 0) {
+                imgElement.style.transform = transforms.join(' ');
+            }
+            
+            // Cropping mit clip-path
+            if (transform.crop && (transform.crop.left > 0 || transform.crop.top > 0 || 
+                transform.crop.right > 0 || transform.crop.bottom > 0)) {
+                
+                const left = transform.crop.left;
+                const top = transform.crop.top;
+                const right = 100 - transform.crop.right;
+                const bottom = 100 - transform.crop.bottom;
+                
+                imgElement.style.clipPath = `inset(${top}% ${100-right}% ${100-bottom}% ${left}%)`;
+            }
         }
 
         function displayThumbnails() {
@@ -299,7 +345,7 @@
             thumbnailsEl.innerHTML = '';
             thumbnailsEl.style.display = 'flex';
             
-            allImages.forEach((imageURL, index) => {
+            allImages.forEach((imageData, index) => {
                 const thumbnail = document.createElement('div');
                 thumbnail.className = 'image-thumbnail';
                 if (index === currentImageIndex) {
@@ -307,12 +353,15 @@
                 }
                 
                 const img = document.createElement('img');
-                img.src = imageURL;
+                img.src = imageData.dataUrl;
                 img.alt = `Bild ${index + 1}`;
                 img.onclick = () => {
                     displayImage(index);
                     updateThumbnailSelection(index);
                 };
+                
+                // Wende auch auf Thumbnails die Transformation an (kleinere Version)
+                applyImageTransform(img, imageData.transform);
                 
                 thumbnail.appendChild(img);
                 thumbnailsEl.appendChild(thumbnail);

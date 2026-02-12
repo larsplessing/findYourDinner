@@ -267,20 +267,23 @@
         
         async function loadSingleRecipeImage(recipeName, imageEl) {
             try {
-                const imageURL = await generator.getRecipeImageURL(recipeName);
+                const imageData = await generator.getRecipeImageURL(recipeName);
                 const recipe = filteredRecipes.find(r => r.name === recipeName);
                 
                 if (!imageEl || !recipe) return;
                 
-                if (imageURL) {
-                    // Verwende echtes Bild
+                if (imageData && imageData.dataUrl) {
+                    // Verwende echtes Bild mit Transformationen
                     const img = document.createElement('img');
-                    img.src = imageURL;
+                    img.src = imageData.dataUrl;
                     img.alt = recipe.name;
-                    img.loading = 'lazy'; // Native lazy loading
+                    img.loading = 'lazy';
                     img.style.width = '100%';
                     img.style.height = '100%';
                     img.style.objectFit = 'cover';
+                    
+                    // Wende Transformationen an
+                    applyImageTransform(img, imageData.transform);
                     
                     imageEl.innerHTML = '';
                     imageEl.appendChild(img);
@@ -291,7 +294,7 @@
                     const img = document.createElement('img');
                     img.src = placeholder;
                     img.alt = recipe.name;
-                    img.loading = 'lazy'; // Native lazy loading
+                    img.loading = 'lazy';
                     img.style.width = '100%';
                     img.style.height = '100%';
                     img.style.objectFit = 'cover';
@@ -301,6 +304,47 @@
                 }
             } catch (error) {
                 console.warn(`Bild für ${recipeName} konnte nicht geladen werden:`, error);
+            }
+        }
+
+        /**
+         * Wendet CSS-Transformationen auf ein Bild-Element an
+         * @param {HTMLImageElement} imgElement - Das Bild-Element
+         * @param {Object} transform - Transformations-Objekt
+         */
+        function applyImageTransform(imgElement, transform) {
+            if (!transform) return;
+            
+            const transforms = [];
+            
+            // Rotation
+            if (transform.rotation && transform.rotation !== 0) {
+                transforms.push(`rotate(${transform.rotation}deg)`);
+            }
+            
+            // Spiegelung
+            let scaleX = transform.flipH ? -1 : 1;
+            let scaleY = transform.flipV ? -1 : 1;
+            if (scaleX !== 1 || scaleY !== 1) {
+                transforms.push(`scale(${scaleX}, ${scaleY})`);
+            }
+            
+            // CSS Transform anwenden
+            if (transforms.length > 0) {
+                imgElement.style.transform = transforms.join(' ');
+            }
+            
+            // Cropping mit clip-path
+            if (transform.crop && (transform.crop.left > 0 || transform.crop.top > 0 || 
+                transform.crop.right > 0 || transform.crop.bottom > 0)) {
+                
+                const left = transform.crop.left;
+                const top = transform.crop.top;
+                const right = 100 - transform.crop.right;
+                const bottom = 100 - transform.crop.bottom;
+                
+                // Verwende object-position für Cropping-Effekt
+                imgElement.style.clipPath = `inset(${top}% ${100-right}% ${100-bottom}% ${left}%)`;
             }
         }
 
