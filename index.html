@@ -44,13 +44,16 @@
             <div class="upload-card">
                 <h1>🍳 Was koche ich heute?</h1>
                 <p>Lade deine Rezepte.xlsx, um zu starten</p>
-                <div>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
                     <label for="fileInput" class="file-label">
-                        📂 Rezepte laden
+                        📂 Datei auswählen
                     </label>
-                    <buttton style="margin-top: 10px;" class="file-label" onclick="closeUploadOverlay()" title="Zurück">
+                    <button class="file-label" onclick="loadFromDefaultPath()" title="Standard Rezepte.xlsx laden">
+                        🔄 Standard-Datei laden
+                    </button>
+                    <button style="margin-top: 10px;" class="file-label file-label-back" onclick="closeUploadOverlay()" title="Zurück">
                         <span class="back-arrow">←</span> Zurück
-                    </buttton>
+                    </button>
                 </div>
                 <input type="file" id="fileInput" accept=".xlsx,.xls" />
                 <div id="uploadStatus" class="upload-status"></div>
@@ -135,17 +138,22 @@
                 // Wende Standard-Kategorie an
                 applyFilters('', currentCategory);
             } else {
-                // Versuche automatisch zu laden
-                try {
-                    loadingState.textContent = 'Versuche Rezepte.xlsx automatisch zu laden...';
-                    await generator.loadFromURL('Rezepte.xlsx', updateProgress);
-                    generator.saveToLocalStorage();
-                    allRecipes = generator.getAllRecipes();
-                    filteredRecipes = [...allRecipes];
-                    initializeCategoryFilter();
-                    // Wende Standard-Kategorie an
-                    applyFilters('', currentCategory);
-                } catch (error) {
+                // Versuche automatisch zu laden (nur bei http/https)
+                if (window.location.protocol !== 'file:') {
+                    try {
+                        loadingState.textContent = 'Versuche Rezepte.xlsx automatisch zu laden...';
+                        await generator.loadFromURL('Rezepte.xlsx', updateProgress);
+                        generator.saveToLocalStorage();
+                        allRecipes = generator.getAllRecipes();
+                        filteredRecipes = [...allRecipes];
+                        initializeCategoryFilter();
+                        // Wende Standard-Kategorie an
+                        applyFilters('', currentCategory);
+                    } catch (error) {
+                        showUploadDialog();
+                    }
+                } else {
+                    // Bei file:// Protocol zeige Upload-Dialog direkt
                     showUploadDialog();
                 }
             }
@@ -524,6 +532,47 @@
             progressContainer.style.display = 'none';
         }
 
+        async function loadFromDefaultPath() {
+            // Prüfe ob wir file:// Protocol verwenden (CORS-Problem)
+            if (window.location.protocol === 'file:') {
+                uploadStatus.innerHTML = `<div class="error">
+                    ⚠️ Der Auto-Load funktioniert nur mit einem lokalen Server.<br><br>
+                    <strong>Lösung 1:</strong> Starte einen Server:<br>
+                    <code style="background: #333; color: #0f0; padding: 5px; border-radius: 4px; display: block; margin: 10px 0;">python3 -m http.server 8000</code>
+                    Dann öffne: <a href="http://localhost:8000" style="color: #667eea; text-decoration: underline;">http://localhost:8000</a><br><br>
+                    <strong>Lösung 2:</strong> Benutze den "📂 Datei auswählen" Button oben.
+                </div>`;
+                return;
+            }
+
+            uploadStatus.innerHTML = '';
+            progressContainer.style.display = 'block';
+            progressBar.style.width = '0%';
+            progressText.textContent = 'Lade Standard-Datei...';
+
+            try {
+                await generator.loadFromURL('Rezepte.xlsx', updateProgress);
+                generator.saveToLocalStorage();
+                allRecipes = generator.getAllRecipes();
+                filteredRecipes = [...allRecipes];
+                uploadOverlay.style.display = 'none';
+                initializeCategoryFilter();
+                // Wende Standard-Kategorie an
+                applyFilters('', currentCategory);
+                
+                const stats = await generator.getStats();
+                console.log(`✓ ${stats.total} Rezepte geladen, ${stats.withImages} mit Bildern`);
+                
+                uploadStatus.innerHTML = '<div class="success">✓ Erfolgreich geladen!</div>';
+                setTimeout(() => {
+                    uploadOverlay.style.display = 'none';
+                }, 1500);
+            } catch (error) {
+                uploadStatus.innerHTML = `<div class="error">Fehler: ${error.message}<br>Bitte stelle sicher, dass Rezepte.xlsx im Hauptverzeichnis liegt.</div>`;
+                progressContainer.style.display = 'none';
+            }
+        }
+
         function closeUploadOverlay() {
             // Verstecke Upload-Overlay
             uploadOverlay.style.display = 'none';
@@ -583,6 +632,22 @@
             margin-top: 20px;
         }
 
+        .upload-status .error {
+            color: #d32f2f;
+            padding: 15px;
+            background: #ffebee;
+            border-radius: 8px;
+            border-left: 4px solid #d32f2f;
+        }
+
+        .upload-status .success {
+            color: #388e3c;
+            padding: 15px;
+            background: #e8f5e9;
+            border-radius: 8px;
+            border-left: 4px solid #388e3c;
+        }
+
         input[type="file"] {
             display: none;
         }
@@ -597,12 +662,24 @@
             font-weight: bold;
             background: #667eea;
             color: white;
+            border: none;
+            width: 100%;
+            text-align: center;
         }
 
         .file-label:hover {
             background: #5568d3;
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .file-label-back {
+            background: #6c757d;
+        }
+
+        .file-label-back:hover {
+            background: #5a6268;
+            box-shadow: 0 5px 15px rgba(108, 117, 125, 0.4);
         }
 
         .progress-container {
