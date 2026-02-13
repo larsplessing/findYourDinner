@@ -132,6 +132,7 @@
             if (!generator.loadFromLocalStorage()) {
                 // Versuche von URL zu laden
                 try {
+                    console.log('Versuche zu laden:' + localStorage?.getItem('currentRecipe'))
                     await generator.loadFromURL('../Rezepte.xlsx');
                     generator.saveToLocalStorage();
                 } catch (error) {
