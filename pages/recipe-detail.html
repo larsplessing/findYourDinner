@@ -773,10 +773,10 @@
 
         .detail-image-gallery {
             width: 100%;
-            max-width: 600px;
         }
 
         .detail-image-main {
+            max-height: fit-content;
             width: 100%;
             height: 400px;
             border-radius: 15px;
@@ -784,12 +784,13 @@
             align-items: center;
             justify-content: center;
             overflow: hidden;
+            background: #f5f5f5;
         }
 
         .detail-image-main img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
             border-radius: 15px;
         }
 
@@ -841,7 +842,7 @@
         .image-thumbnail img {
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: contain;
         }
 
         .emoji-placeholder {
