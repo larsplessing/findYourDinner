@@ -39,7 +39,6 @@
 .recipe-pin-image {
     width: 100%;
     height: auto;
-    min-height: 200px;
     max-height: 400px;
     display: flex;
     align-items: center;
@@ -67,13 +66,11 @@
 }
 
 .recipe-pin-image.tall {
-    min-height: 300px;
-    max-height: 500px;
+    max-height: 150px;
 }
 
 .recipe-pin-image.short {
-    min-height: 150px;
-    max-height: 250px;
+    max-height: 150px;
 }
 
 .recipe-pin-image img {
@@ -260,12 +257,12 @@
 
 @media (max-width: 576px) {
     .masonry-grid {
-        column-count: 1;
+        column-count: 2;
         padding: 0 10px;
     }
     
     .masonry-skeleton {
-        column-count: 1;
+        column-count: 2;
     }
     
     .random-fab {

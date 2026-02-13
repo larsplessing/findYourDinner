@@ -440,7 +440,7 @@
         function getRandomHeight(seed) {
             // Konsistente Höhe basierend auf Namen
             const hash = seed.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-            const heights = ['', 'tall', 'short'];
+            const heights = ['tall', 'short'];
             return heights[hash % heights.length];
         }
 
